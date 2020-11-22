@@ -2,7 +2,8 @@
   "This namespace contains Instaparse CFG (or PEG) grammars (and parsers derived
   therefrom) that are used by RST-CLJ."
   (:require [clojure.string :as str]
-            [instaparse.core :as insta]))
+            [instaparse.core :as insta]
+            [clojure.set :as set]))
 
 (def header-underline-equals-grmr
   "HEADER_UNDERLINE_EQUALS = #'=====*\\n'\n")
@@ -16,7 +17,7 @@
 (def header-underline-grmr
   (str "HEADER_UNDERLINE = ( HEADER_UNDERLINE_EQUALS | "
                             "HEADER_UNDERLINE_HYPHEN | "
-                            "HEADER_UNDERLINE_HYPHEN )\n"
+                            "HEADER_UNDERLINE_BACKTICK )\n"
        header-underline-equals-grmr
        header-underline-hyphen-grmr
        header-underline-backtick-grmr))
@@ -35,7 +36,7 @@
 (def word-char-grmr "< WORD_CHAR > = #'\\w'\n")
 
 (def content-grmr
-  (str "CONTENT = ANY_CHAR* WORD_CHAR ANY_CHAR* \n"
+  (str "CONTENT = ANY_CHAR* WORD_CHAR ANY_CHAR*\n"
        any-char-grmr
        word-char-grmr))
 
@@ -44,7 +45,7 @@
 (def code-block-sigil-grmr "CODE_BLOCK_SIGIL = '::'\n")
 
 (def content-line-pre-code-block-grmr
-  (str "CONTENT_LINE_PRE_CODE_BLOCK = CONTENT CODE_BLOCK_SIGIL < NEWLINE > \n"
+  (str "CONTENT_LINE_PRE_CODE_BLOCK = CONTENT CODE_BLOCK_SIGIL < NEWLINE >\n"
        content-grmr
        code-block-sigil-grmr
        newline-grmr))
@@ -53,29 +54,27 @@
              "More words from the same paragraph.::\n")
 
 (def content-line-grmr
-  (str "CONTENT_LINE = CONTENT < NEWLINE > \n"
+  (str "CONTENT_LINE = CONTENT < NEWLINE >\n"
        content-grmr
        newline-grmr))
 
 (def paragraph-grmr
-  (str "PARAGRAPH = < EMPTY_LINE+ > CONTENT_LINE* CONTENT_LINE \n"
+  (str "PARAGRAPH = < EMPTY_LINE+ > CONTENT_LINE* CONTENT_LINE\n"
        empty-line-grmr
        content-line-grmr))
 
 (def paragraph-pre-code-block-grmr
   (str "PARAGRAPH_PRE_CODE_BLOCK = < EMPTY_LINE > "
                                   "CONTENT_LINE* "
-                                  "CONTENT_LINE_PRE_CODE_BLOCK \n"
+                                  "CONTENT_LINE_PRE_CODE_BLOCK\n"
        empty-line-grmr
        content-line-pre-code-block-grmr
        content-line-grmr))
 
 (def whitespace-prefix-grmr "WHITESPACE_PREFIX = #'^( |\\t)+'\n")
 
-;; (def whitespace-prefix-grmr "WHITESPACE_PREFIX = #'^\\s+'\n")
-
 (def code-block-line-grmr
-  (str "CODE_BLOCK_LINE = WHITESPACE_PREFIX CONTENT < NEWLINE > \n"
+  (str "CODE_BLOCK_LINE = WHITESPACE_PREFIX CONTENT < NEWLINE >\n"
        whitespace-prefix-grmr
        content-grmr
        newline-grmr))
@@ -93,6 +92,14 @@
        paragraph-grmr
        code-block-grmr
        paragraph-pre-code-block-grmr))
+
+(defn normalize-grammar [grmr]
+  (->> grmr
+       str/split-lines
+       distinct
+       (str/join \newline)))
+
+(println (normalize-grammar rst-grmr))
 
 (def rst-prsr (insta/parser rst-grmr))
 
@@ -130,31 +137,36 @@
 (defmethod process-node :CONTENT_LINE_PRE_CODE_BLOCK [[_ [_ & content] & _]]
   (process-content content))
 
-#_[{:white-space "    ",
-  :content "(defmethod process-node :CODE_BLOCK [[_ & lines]]"}
- {:white-space "      ", :content "{:type :code"}
- {:white-space "       ",
-  :content ":lines (mapv (fn [[_ [_ white-space] [_ & content]]]"}
- {:white-space "                      ",
-  :content "{:white-space white-space"}
- {:white-space "                       ",
-  :content ":content (apply str content)})"}
- {:white-space "                    ", :content "lines)})"}]
-
 (defn- normalize-lines [lines]
   (let [smallest-indent (->> lines
                              (map (comp count first))
-                             (reduce min 4))]
-    (mapv second lines)))
+                             (reduce min 12))]
+    (mapv (fn [[indent line]]
+            (str (apply str (drop smallest-indent indent)) line))
+          lines)))
 
 (defmethod process-node :CODE_BLOCK [[_ & lines]]
   {:type :code
    :lines (->> lines
                (mapv (fn [[_ [_ white-space] [_ & content]]]
                        [white-space (apply str content)]))
-               (mapv normalize-lines))})
+               normalize-lines)})
 
 (defmethod process-node :default [node] node)
+
+(def header-levels [:level-1 :level-2 :level-3 :level-4 :level-5])
+
+(defn set-header-levels [doc]
+  (let [key (->> doc
+                 (filter #(= :header (:type %)))
+                 (map :level)
+                 distinct
+                 (interleave header-levels)
+                 (apply hash-map)
+                 set/map-invert)]
+    (map (fn [{:keys [type] :as e}]
+           (if (= :header type) (update e :level key) e))
+         doc)))
 
 (comment
 
@@ -162,6 +174,7 @@
        clojure.java.io/resource
        slurp
        (insta/parse rst-prsr)
-       process-node)
+       process-node
+       set-header-levels)
 
 )
