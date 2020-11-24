@@ -5,27 +5,31 @@
             [instaparse.core :as insta]
             [clojure.set :as set]))
 
-(def header-underline-equals-grmr
-  "HEADER_UNDERLINE_EQUALS = #'=====*\\n'\n")
-
-(def header-underline-hyphen-grmr
-  "HEADER_UNDERLINE_HYPHEN = #'-----*\\n'\n")
-
-(def header-underline-backtick-grmr
-  "HEADER_UNDERLINE_BACKTICK = #'`````*\\n'\n")
+(def whitespace-prefix-grmr "WHITESPACE_PREFIX = #'^( |\\t)+'\n")
 
 (def header-underline-grmr
-  (str "HEADER_UNDERLINE = ( HEADER_UNDERLINE_EQUALS | "
-                            "HEADER_UNDERLINE_HYPHEN | "
-                            "HEADER_UNDERLINE_BACKTICK )\n"
-       header-underline-equals-grmr
-       header-underline-hyphen-grmr
-       header-underline-backtick-grmr))
+  (str "HEADER_LINE = #'("
+       "={4,1000}|"
+       "-{4,1000}|"
+       "`{4,1000}|"
+       ":{4,1000}|"
+       "\\'{4,1000}|"
+       "\\\"{4,1000}|"
+       "~{4,1000}|"
+       "\\^{4,1000}|"
+       "_{4,1000}|"
+       "\\*{4,1000}|"
+       "\\+{4,1000}|"
+       "#{4,1000}|"
+       "<{4,1000}|"
+       ">{4,1000})\\n'\n"))
 
 (def header-text-grmr "HEADER_TEXT = #'.*\\w+.*\\n'\n")
 
 (def header-grmr
-  (str "HEADER = HEADER_TEXT HEADER_UNDERLINE\n"
+  (str "HEADER = "
+       "( HEADER_TEXT HEADER_LINE ) |"
+       "( HEADER_LINE < #'( |\\t)*' > HEADER_TEXT HEADER_LINE )\n"
        header-text-grmr
        header-underline-grmr))
 
@@ -50,9 +54,6 @@
        code-block-sigil-grmr
        newline-grmr))
 
-(insta/parse (insta/parser content-line-pre-code-block-grmr)
-             "More words from the same paragraph.::\n")
-
 (def content-line-grmr
   (str "CONTENT_LINE = CONTENT < NEWLINE >\n"
        content-grmr
@@ -70,8 +71,6 @@
        empty-line-grmr
        content-line-pre-code-block-grmr
        content-line-grmr))
-
-(def whitespace-prefix-grmr "WHITESPACE_PREFIX = #'^( |\\t)+'\n")
 
 (def code-block-line-grmr
   (str "CODE_BLOCK_LINE = WHITESPACE_PREFIX CONTENT < NEWLINE >\n"
@@ -99,8 +98,6 @@
        distinct
        (str/join \newline)))
 
-(println (normalize-grammar rst-grmr))
-
 (def rst-prsr (insta/parser rst-grmr))
 
 (defmulti process-node (fn [[tag & _]] tag))
@@ -108,15 +105,14 @@
 (defmethod process-node :RST [[_ & children]]
   (mapv process-node children))
 
-(def header-levels
-  {:HEADER_UNDERLINE_EQUALS :equals
-   :HEADER_UNDERLINE_HYPHEN :hyphen
-   :HEADER_UNDERLINE_BACKTICK :backtick})
-
-(defmethod process-node :HEADER [[_ [_ text] [_ [level]]]]
-  {:type :header
-   :text (str/trim text)
-   :level (level header-levels level)})
+(defmethod process-node :HEADER [[_ [_ a] [_ b] [_ c]]]
+  (if c
+    {:type :header
+     :text (str/trim b)
+     :level (keyword (str "level-double-" (first a)))}
+    {:type :header
+     :text (str/trim a)
+     :level (keyword (str "level" (first b)))}))
 
 (defn process-paragraph-children [children]
   {:type :paragraph
@@ -154,14 +150,12 @@
 
 (defmethod process-node :default [node] node)
 
-(def header-levels [:level-1 :level-2 :level-3 :level-4 :level-5])
-
 (defn set-header-levels [doc]
   (let [key (->> doc
                  (filter #(= :header (:type %)))
                  (map :level)
                  distinct
-                 (interleave header-levels)
+                 (interleave (range))
                  (apply hash-map)
                  set/map-invert)]
     (map (fn [{:keys [type] :as e}]
