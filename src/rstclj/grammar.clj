@@ -7,6 +7,71 @@
 
 (def whitespace-prefix-grmr "WHITESPACE_PREFIX = #'^( |\\t)+'\n")
 
+(def empty-line-grmr "EMPTY_LINE = #'\\s*\\n'\n")
+
+(def any-char-grmr "< ANY_CHAR > = #'.'\n")
+
+(def word-char-grmr "< WORD_CHAR > = #'\\w'\n")
+
+(def content-grmr
+  (str "CONTENT = ANY_CHAR* WORD_CHAR ANY_CHAR*\n"
+       any-char-grmr
+       word-char-grmr))
+
+(def newline-grmr "NEWLINE = '\\n'\n")
+
+(def sample-bullet-list
+  (str/join
+   \newline
+   ["- This is the first bullet list item.  The blank line above the"
+    "  first list item is required; blank lines between list items"
+    "  (such as below this paragraph) are optional."
+    ""
+    "- This is the first paragraph in the second item in the list."
+    ""
+    "  This is the second paragraph in the second item in the list."
+    "  The blank line above this paragraph is required.  The left edge"
+    "  of this paragraph lines up with the paragraph above, both"
+    "  indented relative to the bullet."
+    ""
+    "  - This is a sublist.  The bullet lines up with the left edge of"
+    "    the text blocks above.  A sublist is a new list so requires a"
+    "    blank line above and below."
+    ""
+    "- This is the third item of the main list."
+    ""
+    "This paragraph is not part of the list."]))
+
+;; "*", "+", "-", "•", "‣", or "⁃", 
+(def bullet-item-grmr
+  (str "BULLET_ITEM = "
+       "WHITESPACE_PREFIX? BULLET ' ' CONTENT < NEWLINE > "
+       "( '  ' WHITESPACE_PREFIX? CONTENT < NEWLINE > )*"
+       "BULLET = ( '*' | '+' | '-')\n"
+       content-grmr
+       newline-grmr
+       whitespace-prefix-grmr))
+
+(a b)
+
+(take 4 (cycle [1 2]))
+
+(apply str (take 100 (cycle (range 10))))
+
+(insta/parse (insta/parser bullet-item-grmr) "- abc def\n")
+
+(insta/parse (insta/parser bullet-item-grmr) sample-bullet-list)
+
+(insta/parse (insta/parser bullet-item-grmr)
+             (str/join
+              \newline
+              ["- This is the first bullet list item.  The blank line above the"
+               "  first list item is required; blank lines between list items"
+               "  (such as below this paragraph) are optional.\n"]))
+
+(a (b (c)))
+;; (str "CODE_BLOCK_LINE = WHITESPACE_PREFIX CONTENT < NEWLINE >\n"
+
 (def header-underline-grmr
   (str "HEADER_LINE = #'("
        "={4,1000}|"
@@ -32,19 +97,6 @@
        "( HEADER_LINE < #'( |\\t)*' > HEADER_TEXT HEADER_LINE )\n"
        header-text-grmr
        header-underline-grmr))
-
-(def empty-line-grmr "EMPTY_LINE = #'\\s*\\n'\n")
-
-(def any-char-grmr "< ANY_CHAR > = #'.'\n")
-
-(def word-char-grmr "< WORD_CHAR > = #'\\w'\n")
-
-(def content-grmr
-  (str "CONTENT = ANY_CHAR* WORD_CHAR ANY_CHAR*\n"
-       any-char-grmr
-       word-char-grmr))
-
-(def newline-grmr "NEWLINE = '\\n'\n")
 
 (def code-block-sigil-grmr "CODE_BLOCK_SIGIL = '::'\n")
 
