@@ -52,26 +52,6 @@
        newline-grmr
        whitespace-prefix-grmr))
 
-(a b)
-
-(take 4 (cycle [1 2]))
-
-(apply str (take 100 (cycle (range 10))))
-
-(insta/parse (insta/parser bullet-item-grmr) "- abc def\n")
-
-(insta/parse (insta/parser bullet-item-grmr) sample-bullet-list)
-
-(insta/parse (insta/parser bullet-item-grmr)
-             (str/join
-              \newline
-              ["- This is the first bullet list item.  The blank line above the"
-               "  first list item is required; blank lines between list items"
-               "  (such as below this paragraph) are optional.\n"]))
-
-(a (b (c)))
-;; (str "CODE_BLOCK_LINE = WHITESPACE_PREFIX CONTENT < NEWLINE >\n"
-
 (def header-underline-grmr
   (str "HEADER_LINE = #'("
        "={4,1000}|"
